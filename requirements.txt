@@ -1,0 +1,39 @@
+#Web Framework
+flask==2.3.3                 #framework python untuk membuat aplikasi web
+flask-socketio==5.3.6        #komunikasi real-time antara server dan browser
+
+#OCR sub-dependencies (install SEBELUM easyocr agar tidak konflik)
+scipy>=1.7.1          #komputasi saintifik (dibutuhkan easyocr)
+scikit-image>=0.17.2  #pemrosesan gambar lanjutan (dibutuhkan easyocr)
+python-bidi>=0.4.2    #teks kanan-ke-kiri / RTL (dibutuhkan easyocr)
+PyYAML>=5.4           # baca file konfigurasi YAML (dibutuhkan easyocr)
+Shapely>=1.7.1        #geometri bentuk/kontur (dibutuhkan easyocr)
+pyclipper>=1.2.1      #polygon clipping (dibutuhkan easyocr)
+ninja>=1.10.0.post2   #build tool untuk kompilasi C extension (dibutuhkan easyocr)
+
+#Deep Learning
+#torch dan torchvision diinstall LEBIH DULU oleh KARTON.bat
+#dari server resmi PyTorch agar tidak konflik versi.
+#Baris ini hanya sebagai catatan versi, pip akan skip jika sudah ada.
+torch==2.5.1         #deep learning framework (CPU only)
+torchvision==0.20.1  #ekstensi PyTorch untuk pemrosesan gambar
+
+#Data & Excel
+pandas==2.2.3      #manipulasi dan analisis data tabel
+openpyxl==3.1.5    # baca/tulis file Excel (.xlsx)
+XlsxWriter==3.2.0  #buat file Excel dengan format khusus
+
+#Image Processing
+Pillow>=10.0.0  #manipulasi gambar (kompatibel Python 3.10+)
+numpy==1.26.4   #komputasi numerik dan array (kompatibel torch 2.5.1)
+
+#Hardware & Database
+pygrabber>=0.1          #enumerate kamera DirectShow di Windows
+psycopg2-binary>=2.9.9  #driver koneksi PostgreSQL
+SQLAlchemy>=2.0.0       #ORM untuk mengelola database via Python
+
+#Computer Vision
+#PENTING: opencv-python diinstall TERAKHIR oleh KARTON.bat secara terpisah
+#setelah easyocr selesai, agar opencv-python-headless (yg dipaksa easyocr)
+#bisa langsung di-uninstall dan diganti opencv-python (superset-nya).
+#Baris ini dikosongkan dari sini supaya urutan install bisa dikontrol di .bat

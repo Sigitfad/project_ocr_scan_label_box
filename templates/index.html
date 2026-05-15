@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <!-- favicon aplikasi gs -->
+  <link rel="icon" type="image/x-icon" href="/static/logo_gs.ico">
+<!-- meta tag untuk konfigurasi halaman: charset, viewport responsif -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GS</title>
+<!-- load google fonts: dm sans untuk body, dm mono untuk monospace, montserrat untuk heading -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet">
+<!-- bootstrap 5 css framework untuk responsive grid dan components -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css">
+<!-- bootstrap icons library untuk berbagai icon svg -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css">
+<!-- socket.io untuk real-time communication dengan server -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<!-- custom stylesheet untuk styling tampilan aplikasi -->
+<link rel="stylesheet" href="/static/css/main.css">
+<style>
+/* ── SHIFT INLINE BADGE: tampilkan shift (1,2,3) dengan warna berbeda-beda ── */
+.shift-badge-inline{font-weight:700; font-family:'Montserrat',sans-serif; font-size:11px; letter-spacing:.5px; text-transform:uppercase; white-space:nowrap;}
+.shift-badge-inline.shift-1{color:#8497d4;} /* warna shift 1 biru */
+.shift-badge-inline.shift-2{color:#6a1b9a;} /* warna shift 2 ungu */
+.shift-badge-inline.shift-3{color:#1b5e20;} /* warna shift 3 hijau */
+
+/* ── BANNER AUTO-EXPORT: modal floating untuk menampilkan progress auto export ── */
+#auto-export-banner{
+  display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  background:var(--bg-2);border:1px solid var(--border);
+  border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.2);
+  padding:12px 20px;z-index:99999;min-width:320px;max-width:480px;
+  flex-direction:column;gap:6px;
+}
+#auto-export-banner.show{display:flex;} /* tampilkan saat export berjalan */
+.aeb-header{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;} /* header banner */
+.aeb-icon{font-size:16px;} /* icon di header (animation) */
+.aeb-msg{font-size:12px;color:var(--text-2);} /* pesan status export */
+.aeb-close{margin-left:auto;background:none;border:none;cursor:pointer; /* tombol close di kanan */
+  color:var(--text-2);font-size:14px;padding:0 2px;}
+/* progress bar auto-export: bar visual yang menunjukkan persentase progress */
+#aeb-progress-wrap{display:none;flex-direction:column;gap:3px;}
+#aeb-progress-wrap.show{display:flex;} /* tampilkan saat progress dimulai */
+.aeb-progress-track{width:100%;height:7px;background:var(--border);border-radius:4px;overflow:hidden;} /* background track */
+.aeb-progress-bar{height:100%;width:0%;background:linear-gradient(90deg,#16a34a,#22c55e);border-radius:4px;transition:width .3s ease;} /* bar yang bergerak */
+.aeb-progress-label{font-size:11px;color:var(--text-3);text-align:right;} /* teks persentase */
+</style>
+</head>
+<body>
+
+<!-- topbar: header navigasi utama dengan menu, setting, binary toggle, theme, dan clock -->
+<header id="topbar">
+  <div class="top-left">
+    <!-- menu button wrapper: dropdown menu untuk akses fitur utama aplikasi -->
+    <div class="menu-wrapper" id="menu-wrapper">
+      <button class="top-icon-btn menu-toggle-btn" id="btn-menu" onclick="toggleMenu()" title="Menu">
+        <i class="bi bi-grid-3x3-gap-fill"></i> <!-- icon menu grid -->
+        <span>Menu</span>
+        <i class="bi bi-chevron-down menu-chevron" id="menu-chevron"></i> <!-- chevron dropdown indicator -->
+      </button>
+      <!-- menu dropdown panel: berisi tombol akses ke fitur-fitur utama aplikasi -->
+      <div class="menu-dropdown" id="menu-dropdown">
+        <!-- tombol text output: toggle panel teks ocr mentah -->
+        <button class="menu-item-btn" id="btn-text-output" onclick="toggleTextOutput(); closeMenu()" title="Text Output">
+          <i class="bi bi-textarea-t"></i>
+          <span>Text Output</span>
+        </button>
+        <!-- tombol history: buka modal history scan berdasarkan tanggal dan shift -->
+        <button class="menu-item-btn" id="history-btn" onclick="openHistory(); closeMenu()" title="Riwayat Scan">
+          <i class="bi bi-hourglass-split"></i>
+          <span>History</span>
+        </button>
+        <!-- tombol file: buka folder export atau daftar file yang sudah diekspor -->
+        <button class="menu-item-btn" id="excel-btn" onclick="openFileFolder(); closeMenu()" title="Daftar File Export">
+          <i class="bi bi-file-earmark-spreadsheet-fill"></i>
+          <span>File</span>
+        </button>
+        <!-- tombol scan from file: upload image dan jalankan ocr pada file statis -->
+        <button class="menu-item-btn" id="btn-scan" onclick="clickScanFile(); closeMenu()" title="Scan From File">
+          <i class="bi bi-image"></i>
+          <span>Scan From File</span>
+        </button>
+        <!-- tombol export data: buka modal untuk konfigurasi export data ke excel -->
+        <button class="menu-item-btn menu-item-btn--export" onclick="openExport(); closeMenu()" title="Export Data">
+          <i class="bi bi-file-earmark-spreadsheet-fill"></i>
+          <span>Export Data</span>
+        </button>
+      </div>
+    </div>
+    <button class="btn btn-outline" id="btn-setting" onclick="openSetting()">
+      <i class="bi bi-sliders"></i> Setting
+    </button>
+    <div class="topbar-binary-wrap" title="Binary Color — Tampilan kamera hitam-putih" onclick="document.getElementById('chk-edge').click()">
+      <label class="tog topbar-tog" onclick="event.stopPropagation()">
+        <input type="checkbox" id="chk-edge" onchange="onOptionChange()" title="Binary Color" aria-label="Binary Color">
+        <div class="tog-track"></div>
+        <div class="tog-thumb"></div>
+      </label>
+      <span class="topbar-binary-label">B&amp;W</span>
+    </div>
+  </div>
+
+  <div class="top-center">
+    <span id="topbar-label-name">—</span>
+  </div>
+
+  <div class="top-right">
+    <div class="topbar-datetime">
+      <div class="topbar-date-row">
+        <span id="ft-date">—</span>
+        <span class="topbar-date-sep">—</span>
+        <span id="shift-badge" class="shift-badge-inline">Shift —</span>
+      </div>
+      <span id="ft-time">--:--:--</span>
+    </div>
+    <button class="top-icon-btn top-icon-btn--icon-only" id="theme-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+      <i class="bi bi-moon-fill" id="theme-icon"></i>
+    </button>
+  </div>
+</header>
+
+<!--area utama-->
+<div id="main-layout">
+  <div id="left-col">
+  <div id="app">
+
+  <div id="center">
+    <div id="video-area">
+      <img id="video-feed" alt="live">
+      <img id="scan-preview" alt="scan">
+      <div id="video-ph">
+        <div class="ph-ring"><i class="bi bi-camera-video-off"></i></div>
+        <p>Camera Offline</p>
+      </div>
+      <div id="scan-overlay"></div>
+      <div id="result-badge"><div id="result-code">—</div><div id="result-status">Waiting</div></div>
+      <div id="flash-overlay"></div>
+      <div id="shutter-border"></div>
+      <div id="scan-indicator"><span class="dot"></span> Scanning…</div>
+      <div id="motion-indicator"><span class="dot"></span> Motion</div>
+      <div id="ocr-status-indicator"></div>
+      <div id="file-dropzone" onclick="document.getElementById('fhidden').click()" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onFileDrop(event)">
+        <i class="bi bi-cloud-arrow-up dropzone-icon"></i>
+        <div>Drop image here or click to browse</div>
+        <div class="dropzone-hint">JPG · PNG · BMP · WEBP</div>
+      </div>
+      <input type="file" id="fhidden" title="Upload gambar" aria-label="Upload gambar" accept=".jpg,.jpeg,.png,.bmp,.webp" onchange="onFileChange(event)" class="input-hidden">
+    </div>
+
+    <div id="text-output-panel">
+      <div class="text-output-header">
+        <span class="label label-no-margin">TEXT OUTPUT</span>
+        <button onclick="toggleTextOutput()" title="Tutup Text Output" aria-label="Tutup Text Output" class="btn-close-inline"><i class="bi bi-x-lg"></i></button>
+      </div>
+      <div id="ocr-box">
+        <div class="ocr-item ocr-item-placeholder">Menunggu deteksi…</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /#app -->
+
+<!--footer bawah-->
+<footer id="footer">
+  <div id="footer-left-section">
+    <div id="footer-start">
+      <button class="btn-start-footer" id="btn-start" onclick="toggleCamera()">
+        <span class="start-val-text">START</span>
+      </button>
+    </div>
+    <div id="footer-stats">
+      <div class="footer-stat-card">
+        <div class="footer-stat-label">QTY PLAN</div>
+        <div class="footer-stat-val c-qty-plan" id="ft-qty-progress">— / —</div>
+      </div>
+      <div class="footer-stat-card">
+        <div class="footer-stat-label">TOTAL</div>
+        <div class="footer-stat-val c-total" id="stat-total">0</div>
+      </div>
+      <div class="footer-stat-card">
+        <div class="footer-stat-label">OK</div>
+        <div class="footer-stat-val c-ok" id="stat-ok">0</div>
+      </div>
+      <div class="footer-stat-card">
+        <div class="footer-stat-label">NOT OK</div>
+        <div class="footer-stat-val c-nok" id="stat-nok">0</div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+  </div><!-- /#left-col -->
+
+  <!--panel kanan-->
+  <div id="right-panel">
+    <div class="search-container">
+      <i class="bi bi-search search-icon-left"></i>
+      <input type="text" id="table-search" title="Cari data" placeholder="Cari waktu, label, atau status…"
+        oninput="filterTable(this.value)">
+      <button id="table-search-clear" onclick="clearTableSearch()" title="Hapus pencarian" aria-label="Hapus pencarian" class="table-search-clear-btn"><i class="bi bi-x-circle-fill"></i></button>
+    </div>
+    <div id="table-wrap">
+      <table id="code-table">
+        <thead><tr><th>WAKTU</th><th>LABEL</th><th class="th-center">STATUS</th><th class="th-center">FOTO</th></tr></thead>
+        <tbody id="code-tbody">
+          <tr><td colspan="4" class="table-empty-cell">Pilih label terlebih dahulu</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="btn-row-bottom">
+      <button class="btn btn-danger btn-flex" onclick="clearSelected()">
+        <i class="bi bi-trash3"></i> Clear
+      </button>
+      <button class="btn-icon" title="Refresh" aria-label="Refresh" onclick="refreshData()">⭮</button>
+    </div>
+  </div>
+
+</div><!-- /#main-layout -->
+
+<!--modal setting-->
+<div class="modal fade" id="mSetting" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="modal-title">Setting</span>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body modal-body-flex">
+        <div class="m-group">
+          <span class="m-title">Select Camera</span>
+          <div class="sel-wrap"><select id="s-cam" title="Pilih Kamera" aria-label="Pilih Kamera"></select></div>
+        </div>
+        <div class="export-flex-row">
+          <div class="m-group export-flex-col">
+            <span class="m-title">Tipe</span>
+            <div class="sel-wrap"><select id="s-preset" title="Pilih Tipe" aria-label="Pilih Tipe" onchange="syncSettingLabel()"><option value="JIS">JIS</option><option value="DIN">DIN</option></select></div>
+          </div>
+          <div class="m-group export-flex-col-sm">
+            <span class="m-title">Label</span>
+            <div class="ss-wrap" id="ss-label-wrap">
+              <div class="ss-input-box" onclick="ssToggle('ss-label-wrap')">
+                <input type="text" id="ss-label-input" title="Cari label" placeholder="Cari label…" oninput="ssFilter('ss-label-wrap','s-label')" onkeydown="ssKeyNav(event,'ss-label-wrap','s-label')" autocomplete="off">
+                <i class="bi bi-chevron-down ss-chevron"></i>
+              </div>
+              <div class="ss-dropdown" id="ss-label-drop"></div>
+            </div>
+            <input type="hidden" id="s-label" aria-hidden="true">
+            <div class="warn-note">* Pilih label terlebih dahulu</div>
+          </div>
+        </div>
+        <div class="m-group">
+          <span class="m-title">QTY Plan</span>
+          <div class="setting-row-inline">
+            <span class="setting-label-sm">QTY Plan :</span>
+            <input type="number" id="s-qty-plan" title="QTY Plan" aria-label="QTY Plan" min="0" max="999999" value="0"
+              class="input-qty-plan"
+              onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+            <span class="setting-label-xs">pcs</span>
+          </div>
+          <div class="warn-note">* Isi QTY Plan terlebih dahulu</div>
+        </div>
+        <div class="m-group">
+          <span class="m-title">Tata Letak Label</span>
+          <div class="sel-wrap mt-2"><select id="s-roi" title="Pilih Tata Letak" aria-label="Pilih Tata Letak"></select></div>
+          <div class="setting-label-roi">* Hanya area kotak yang di-scan</div>
+        </div>
+        <button class="btn-modal mt-1" onclick="saveSetting()">Save Setting</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!--modal export-->
+<div class="modal fade" id="mExport" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-md">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="modal-title">Export Data</span>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body modal-body-flex-sm">
+        <div class="export-flex-row">
+          <div class="m-group export-flex-col">
+            <span class="m-title">Date Range</span>
+            <div class="form-check mt-2"><input class="form-check-input" type="radio" name="xdate" id="rb-all" value="All" onchange="onXDate()"><label class="form-check-label" for="rb-all">Semua Data</label></div>
+            <div class="form-check mt-1"><input class="form-check-input" type="radio" name="xdate" id="rb-today" value="Today" onchange="onXDate()" checked><label class="form-check-label" for="rb-today">Hari Ini</label></div>
+          </div>
+          <div class="m-group export-flex-col-sm">
+            <span class="m-title">Tipe &amp; Label</span>
+            <div class="export-inline-row">
+              <span class="export-label-xs">Tipe:</span>
+              <div class="sel-wrap export-sel-sm"><select id="x-preset" title="Pilih Tipe Export" aria-label="Pilih Tipe Export" class="export-sel-font" onchange="populateXLabel()"><option value="Preset">Preset</option><option value="JIS">JIS</option><option value="DIN">DIN</option></select></div>
+            </div>
+            <div class="form-check mt-2"><input class="form-check-input" type="checkbox" id="x-lchk" checked onchange="onXLabelChk()"><label class="form-check-label" for="x-lchk">Pilih Label</label></div>
+            <div class="ss-wrap" id="ss-xlabel-wrap">
+              <div class="ss-input-box" onclick="ssToggle('ss-xlabel-wrap')">
+                <input type="text" id="ss-xlabel-input" title="Cari label export" placeholder="Cari label…" oninput="ssFilter('ss-xlabel-wrap','x-label')" onkeydown="ssKeyNav(event,'ss-xlabel-wrap','x-label')" autocomplete="off">
+                <i class="bi bi-chevron-down ss-chevron"></i>
+              </div>
+              <div class="ss-dropdown" id="ss-xlabel-drop"></div>
+            </div>
+            <input type="hidden" id="x-label" aria-hidden="true" value="All Label">
+          </div>
+        </div>
+        <div class="m-group">
+          <span class="m-title">Pilih Bulan</span>
+          <div class="export-date-inputs">
+            <input type="checkbox" id="x-mchk" title="Filter bulan" aria-label="Filter bulan" onchange="onXMonthChk()" class="export-chk">
+            <div class="sel-wrap export-sel-sm"><select id="x-month" title="Pilih Bulan" aria-label="Pilih Bulan" disabled class="export-sel-font"></select></div>
+            <div class="sel-wrap export-sel-year-wrap"><select id="x-year" title="Pilih Tahun" aria-label="Pilih Tahun" disabled class="export-sel-font"></select></div>
+          </div>
+        </div>
+        <div class="m-group">
+          <span class="m-title">Pilih Tanggal</span>
+          <div class="export-date-inputs">
+            <input type="checkbox" id="x-dchk" title="Filter tanggal" aria-label="Filter tanggal" onchange="onXDateChk()" class="export-chk">
+            <input type="date" id="x-start" title="Tanggal mulai" aria-label="Tanggal mulai" disabled class="export-date-input">
+            <span class="export-sep">—</span>
+            <input type="date" id="x-end" title="Tanggal akhir" aria-label="Tanggal akhir" disabled class="export-date-input">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-modal" id="btn-export-do" onclick="doExport()">Export</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!--modal konfirmasi mulai kamera-->
+<div class="modal fade" id="mCamConfirm" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered cc-dialog">
+    <div class="modal-content cc-modal-content">
+      <div class="modal-header cc-modal-header">
+        <span class="cc-modal-title"><i class="bi bi-camera-video-fill cc-icon"></i>Mulai Kamera?</span>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body modal-body-flex cc-modal-body">
+        <div class="cc-info-box">
+          <span class="cc-info-key">LABEL :</span>
+          <span class="cc-info-val" id="cc-label">—</span>
+        </div>
+        <div class="cc-info-box">
+          <span class="cc-info-key">QTY PLAN :</span>
+          <span class="cc-info-val" id="cc-qty">—</span>
+        </div>
+      </div>
+      <div class="modal-footer cc-modal-footer">
+        <button class="cc-btn-mulai" id="cc-btn-ok" onclick="_doCamConfirmStart()">Mulai</button>
+        <button class="cc-btn-batal" data-bs-dismiss="modal">Batal</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="confirm-overlay">
+  <div id="confirm-box">
+    <div id="confirm-header">
+      <div id="confirm-icon"><i class="bi bi-trash3-fill"></i></div>
+      <div id="confirm-title">Hapus Data</div>
+    </div>
+    <div id="confirm-msg"></div>
+    <div id="confirm-btns">
+      <button id="confirm-cancel" onclick="closeConfirm(false)">Batal</button>
+      <button id="confirm-ok" onclick="closeConfirm(true)">Hapus</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-ct"></div>
+
+<!--modal history-->
+<div class="modal fade" id="mHistory" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered hist-modal-dialog" id="hist-modal-dialog">
+    <div class="modal-content hist-modal-content">
+      <!-- HEADER dengan breadcrumb -->
+      <div class="hist-header-wrap">
+        <div class="hist-breadcrumb">
+          <span class="hist-title">HISTORY SCAN</span>
+          <span id="hist-bc-sep1" class="hist-bc-sep">›</span>
+          <span id="hist-bc-date" class="hist-bc-item"></span>
+          <span id="hist-bc-sep2" class="hist-bc-sep">›</span>
+          <span id="hist-bc-shift" class="hist-bc-item"></span>
+          <span id="hist-bc-sep3" class="hist-bc-sep">›</span>
+          <span id="hist-bc-label" class="hist-bc-item"></span>
+        </div>
+        <button type="button" onclick="bootstrap.Modal.getInstance(el('mHistory'))?.hide()" title="Tutup" aria-label="Tutup" class="btn-modal-close"><i class="bi bi-x-lg"></i></button>
+      </div>
+
+      <!-- BODY: 4 kolom sesuai mockup -->
+      <div class="hist-body">
+
+        <!-- Kolom 1: TANGGAL -->
+        <div class="hist-col-date">
+          <div class="hist-col-date-header">
+            <div class="hist-col-header-title">TANGGAL</div>
+            <button class="hist-date-search-btn" id="hist-date-search-btn" onclick="toggleHistDateSearch()" title="Cari Tanggal"><i class="bi bi-search"></i></button>
+            <div class="hist-search-wrap" id="hist-search-wrap">
+              <i class="bi bi-search hist-search-icon"></i>
+              <input id="hist-date-search" type="text" placeholder="Cari tanggal…" oninput="filterHistDates(this.value)">
+            </div>
+          </div>
+          <div id="hist-date-list" class="flex-scroll-thin"></div>
+        </div>
+
+        <!-- Kolom 2: SHIFT -->
+        <div class="hist-col-shift" id="hist-col-shift-panel">
+          <div class="hist-col-shift-header">SHIFT</div>
+          <div id="hist-shift-select-list" class="flex-scroll-thin">
+            <div class="hist-shift-empty">Pilih tanggal</div>
+          </div>
+        </div>
+
+        <!-- Kolom 3: LABEL -->
+        <div class="hist-col-label" id="hist-col-label-panel">
+          <div class="hist-col-label-header">LABEL</div>
+          <div id="hist-label-list" class="flex-scroll-thin">
+            <div id="hist-label-empty" class="hist-label-empty">
+              <i class="bi bi-calendar3 hist-label-empty-icon"></i>Pilih tanggal
+            </div>
+          </div>
+        </div>
+
+        <!-- Kolom 4: DATA SCAN -->
+        <div id="hist-scan-col" class="hist-scan-col">
+          <div id="hist-scan-header" class="hist-scan-header">
+            <div class="hist-scan-header-inner">
+              <span class="hist-scan-label-title" id="hist-scan-label-title">—</span>
+              <span class="hist-badge hist-badge-neutral" id="hist-scan-total"></span>
+              <span class="hist-badge hist-badge-plan" id="hist-scan-plan"></span>
+              <span class="hist-badge hist-badge-ok" id="hist-scan-ok"></span>
+              <span class="hist-badge hist-badge-nok" id="hist-scan-nok"></span>
+              <button id="hist-export-btn" onclick="histExport()" title="Export data" aria-label="Export data">Export</button>
+            </div>
+          </div>
+          <div id="hist-scan-wrap">
+            <table id="hist-scan-table">
+              <colgroup><col class="hst-col-time"><col class="hst-col-code"><col class="hst-col-status"><col class="hst-col-foto"></colgroup>
+              <thead class="hist-table-head">
+                <tr>
+                  <th class="hist-th hist-th-nowrap">Waktu</th>
+                  <th class="hist-th">Kode Scan</th>
+                  <th class="hist-th hist-th-center hist-th-nowrap">Status</th>
+                  <th class="hist-th hist-th-center">Foto</th>
+                </tr>
+              </thead>
+              <tbody id="hist-scan-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /.hist-body -->
+    </div>
+  </div>
+</div>
+
+<div id="hist-lightbox" oncontextmenu="lbZoomOut(event)">
+  <div id="lb-inner">
+    <img id="hist-lightbox-img" src="" alt="foto" ondblclick="lbZoomReset()" oncontextmenu="lbZoomOut(event)">
+    <div id="hist-lightbox-caption"></div>
+  </div>
+  <button onclick="closeHistLightbox()" title="Tutup" aria-label="Tutup" class="lb-btn lb-btn-close"><i class="bi bi-x"></i></button>
+  <div class="lb-controls">
+    <button onclick="lbZoomOut(event)" title="Zoom Out" aria-label="Zoom Out" class="lb-btn"><i class="bi bi-zoom-out"></i></button>
+    <span id="lb-zoom-label">100%</span>
+    <button onclick="lbZoomIn(event)" title="Zoom In" aria-label="Zoom In" class="lb-btn"><i class="bi bi-zoom-in"></i></button>
+  </div>
+  <div onclick="closeHistLightbox()" class="lb-overlay-close"></div>
+</div>
+
+<div id="notok-alarm-banner">
+  <div class="notok-banner-inner">
+    <div class="notok-banner-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+    <div class="notok-banner-text">
+      <strong>NOT OK DETECTED</strong>
+      <span id="notok-banner-code"></span>
+    </div>
+    <button class="notok-banner-mute" onclick="muteNotokAlarm()" title="Bisukan Alarm" aria-label="Bisukan Alarm">Mute</button>
+    <button class="notok-banner-close" onclick="closeNotokBanner()" title="Tutup" aria-label="Tutup">✕</button>
+  </div>
+</div>
+
+<div id="auto-export-banner">
+  <div class="aeb-header">
+    <i class="bi bi-file-earmark-spreadsheet-fill aeb-icon" id="aeb-icon"></i>
+    <span id="aeb-title">Auto-Export Shift</span>
+    <button class="aeb-close" onclick="closeAutoExportBanner()" title="Tutup"><i class="bi bi-x-lg"></i></button>
+  </div>
+  <div id="aeb-progress-wrap">
+    <div class="aeb-progress-track"><div class="aeb-progress-bar" id="aeb-progress-bar"></div></div>
+    <div class="aeb-progress-label" id="aeb-progress-label">0%</div>
+  </div>
+  <div class="aeb-msg" id="aeb-msg"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/main.js"></script>
+<script>
+window.toggleTextOutput = function() {
+  const panel = document.getElementById('text-output-panel');
+  if (!panel) return;
+  const isHidden = panel.style.display === 'none' || panel.style.display === '';
+  panel.style.display = isHidden ? 'flex' : 'none';
+};
+
+//menu toggle
+window.toggleMenu = function() {
+  const wrapper = document.getElementById('menu-wrapper');
+  const dropdown = document.getElementById('menu-dropdown');
+  const isOpen = wrapper.classList.contains('open');
+  if (isOpen) {
+    wrapper.classList.remove('open');
+    return;
+  }
+  //mitung posisi berdasarkan tombol Menu (kini di top-left)
+  const btn = document.getElementById('btn-menu');
+  const rect = btn.getBoundingClientRect();
+  dropdown.style.top = (rect.bottom + 5) + 'px';
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.right = 'auto';
+  wrapper.classList.add('open');
+};
+
+window.closeMenu = function() {
+  const wrapper = document.getElementById('menu-wrapper');
+  wrapper.classList.remove('open');
+};
+
+//tutup menu kalau klik di luar
+document.addEventListener('click', function(e) {
+  const wrapper = document.getElementById('menu-wrapper');
+  if (wrapper && !wrapper.contains(e.target)) {
+    wrapper.classList.remove('open');
+  }
+});
+</script>
+</body>
+</html>
